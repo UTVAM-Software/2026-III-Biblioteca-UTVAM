@@ -141,10 +141,6 @@ Necesitas un hosting con **PHP 8.1+**, **MySQL** y **certificado SSL gratis** (c
 | La foto no se sube | Pesa más de 3 MB, no es JPG/PNG/WEBP, o falta permiso en `storage/fotos`. Si es mayor a 2 MB, revisa `upload_max_filesize` en `php.ini`. |
 | `npm` no se reconoce | Cierra y reabre la terminal tras instalar Node. |
 | En hosting todo da 404 en `/api` | La carpeta debe llamarse exactamente `api` y estar dentro de `public_html`. |
-
-## PARTE 8 — Lo que este sistema NO tiene (léelo antes de ofrecérselo a un dentista real)
-
-- **Es un esqueleto de agenda + fichas, no un expediente clínico.** Falta: odontograma, historial de tratamientos, alergias/antecedentes estructurados, presupuestos/cobros, recetas, consentimientos.
 - **Un solo usuario**, sin roles (doctor/recepción) ni bitácora de quién cambió qué.
 - **Sin editar datos de un paciente ya guardado.** Sí se puede dar de baja (botón "Dar de baja" en Pacientes → Buscar): lo oculta de búsquedas y citas nuevas, pero conserva su historial. No hay un botón para editar nombre/especie/propietario todavía.
 - **Sin respaldos automáticos.** Configura respaldos de la BD *y* de `storage/fotos` (cPanel → *Backup*, o exportar desde phpMyAdmin cada semana).
