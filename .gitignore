@@ -1,0 +1,25 @@
+# Dependencias
+frontend/node_modules/
+
+# Compilaciones
+frontend/dist/
+
+# Variables de entorno
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Temporales
+*.tmp
+*.temp
