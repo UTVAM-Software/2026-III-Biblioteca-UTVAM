@@ -1,4 +1,4 @@
-# Sistema de Gestión Dental (PHP + React + MySQL)
+# Sistema WEB en base veterinaria (PHP + React + MySQL)
 
 Versión para consultorio dental del sistema de Pacientes/Citas. Conserva la lógica original
 (Dashboard, Pacientes con foto, Citas, Historial, Configuración, colores y nombre configurables),
@@ -21,7 +21,7 @@ en lugar de Google Apps Script + Google Sheets.
 ## Estructura
 
 ```
-clinica-dental/
+clinica-veterinaria/
 ├── database/schema.sql        ← crea las tablas
 ├── backend/api/
 │   ├── config.php             ← EDITAS ESTO por cliente (nombre, BD, contraseña, colores)
@@ -52,7 +52,7 @@ clinica-dental/
 
 1. Abre http://localhost/phpmyadmin
 2. Pestaña **Importar** → *Seleccionar archivo* → `database/schema.sql` → **Importar**.
-3. A la izquierda debe aparecer la base `clinica_dental` con 3 tablas: `generos`, `pacientes`, `citas`.
+3. A la izquierda debe aparecer la base `clinica_veterinaria` con 3 tablas: `especie`, `pacientes`, `citas`.
 
 ## PARTE 3 — Configurar
 
@@ -76,14 +76,14 @@ Necesitas **dos terminales abiertas a la vez** (MySQL de XAMPP debe seguir encen
 
 **Terminal 1 — el servidor PHP:**
 ```
-cd clinica-dental\backend\api
+cd clinica-veterinaria\backend\api
 C:\xampp\php\php.exe -S localhost:8000
 ```
 Déjala abierta. Prueba abrir http://localhost:8000/index.php?r=config : debe verse un JSON con el nombre del sistema.
 
 **Terminal 2 — React:**
 ```
-cd clinica-dental\frontend
+cd clinica-veterinaria\frontend
 npm install
 npm run dev
 ```
@@ -95,7 +95,7 @@ Cada vez que guardas un archivo, la página se actualiza sola. Para cambios en P
 ## PARTE 5 — Cómo modificar (lo más común)
 
 - **Textos y nombres:** títulos y etiquetas están en `frontend/src/App.jsx` (busca el texto y cámbialo). Nombre y colores del sistema: `config.php`.
-- **Opciones del campo Género:** en phpMyAdmin, tabla `generos`, agrega/edita filas.
+- **Opciones del campo Género:** en phpMyAdmin, tabla `especie`, agrega/edita filas.
 - **Agregar un campo (ejemplo: fecha de nacimiento del paciente):**
   1. phpMyAdmin → pestaña SQL: `ALTER TABLE pacientes ADD fecha_nacimiento DATE NULL;`
   2. `index.php`, en `case 'pacientes'`: agrega `fecha_nacimiento` al `SELECT` y al `INSERT` (con su `?` y su valor en el arreglo).
