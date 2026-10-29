@@ -1,0 +1,12 @@
+frontend/node_modules/
+frontend/dist/
+backend/api/config.php
+backend/api/storage/fotos/*
+!backend/api/storage/fotos/.htaccess
+!backend/api/storage/fotos/.gitkeep
+backend/api/lib/fpdf/fpdf.php
+backend/api/lib/fpdf/font/
+repomix-output.xml
+Thumbs.db
+.vscode/
+.idea/

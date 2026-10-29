@@ -1,0 +1,13 @@
+PARA EJECUTARLO ES 
+
+FRONTEND
+
+cd "C:\Users\emman\OneDrive\Documentos\clinica-veterinaria\frontend"
+
+NPM RUN DEV
+
+BACKEND
+
+cd "C:\Users\emman\OneDrive\Documentos\clinica-veterinaria\backend\api"
+
+& "C:\wamp64\bin\php\php8.2.29\php.exe" -S localhost:8000

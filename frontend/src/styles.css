@@ -1,0 +1,119 @@
+/* Los valores de color, espaciado, tipografía, radios y layout vienen
+   de tokens.css (importado antes que este archivo en main.jsx). */
+
+* { box-sizing: border-box; }
+body { font-family: var(--font-base); background: var(--fondo); margin: 0; color: var(--color-texto); }
+
+/* ---------- Accesibilidad: utilidades base ---------- */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+.skip-link {
+  position: absolute; left: -9999px; top: 0; z-index: 100;
+  background: var(--principal); color: white;
+  padding: var(--space-2) var(--space-4); border-radius: 0 0 var(--radius-sm) 0;
+}
+.skip-link:focus { left: 0; }
+
+/* Anillo de foco visible para navegación por teclado (mínimo WCAG 2.4.7).
+   OJO: --color-foco es un valor fijo; si cambias los colores de marca de
+   un cliente, revisa que siga contrastando contra --principal/--secundario. */
+:focus-visible { outline: 3px solid var(--color-foco); outline-offset: 2px; }
+
+/* ---------- Layout general ---------- */
+.app-shell { display: flex; min-height: 100vh; }
+.content { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.topbar { background: var(--principal); color: white; padding: var(--space-4) var(--space-6); }
+.topbar h1 { margin: 0; font-size: var(--font-size-xl); font-weight: 600; }
+main { padding: var(--space-5); max-width: 1000px; margin: 0 auto; width: 100%; }
+
+/* ---------- Sidebar ---------- */
+.sidebar {
+  width: var(--sidebar-width); min-width: var(--sidebar-width); background: var(--secundario); color: white;
+  display: flex; flex-direction: column; transition: width var(--transicion-rapida), min-width var(--transicion-rapida);
+}
+.sidebar.collapsed { width: var(--sidebar-width-collapsed); min-width: var(--sidebar-width-collapsed); }
+.sidebar-top { display: flex; align-items: center; justify-content: space-between; padding: var(--space-3); border-bottom: 1px solid rgba(255,255,255,.15); }
+.sidebar-brand { display: flex; align-items: center; gap: var(--space-2); font-weight: 700; font-size: var(--font-size-md); white-space: nowrap; overflow: hidden; }
+.sidebar-toggle { background: transparent; border: none; color: white; cursor: pointer; padding: var(--space-2); border-radius: var(--radius-sm); display: flex; }
+.sidebar-toggle:hover { background: rgba(255,255,255,.12); }
+.sidebar nav { flex: 1; display: flex; flex-direction: column; gap: 2px; padding: var(--space-2); overflow-y: auto; }
+.sidebar-item {
+  display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3); background: transparent;
+  border: none; color: white; cursor: pointer; border-radius: var(--radius-md); font-size: var(--font-size-base);
+  text-align: left; white-space: nowrap; overflow: hidden; width: 100%;
+}
+.sidebar-item:hover { background: rgba(255,255,255,.10); }
+.sidebar-item.active { background: rgba(255,255,255,.18); }
+.sidebar-item svg { flex-shrink: 0; }
+.sidebar.collapsed .sidebar-item { justify-content: center; padding: var(--space-2); }
+.sidebar.collapsed .sidebar-label { display: none; }
+.sidebar.collapsed .sidebar-brand span { display: none; }
+.sidebar-footer { padding: var(--space-2); border-top: 1px solid rgba(255,255,255,.15); }
+.sidebar-item.salir:hover { background: rgba(192,57,43,.35); }
+
+/* ---------- Tarjetas y formularios ---------- */
+.card { background: var(--fondoContenido); border: 1px solid var(--borde); border-radius: var(--radius-lg); padding: var(--space-5); margin-bottom: var(--space-4); }
+.card h2 { margin-top: 0; font-size: var(--font-size-lg); }
+.saludo { font-size: var(--font-size-lg); font-weight: 600; margin: 0 0 4px; color: var(--secundario); }
+.subsaludo { font-size: var(--font-size-sm); color: var(--color-texto-suave); margin: 0 0 var(--space-4); }
+.stats { display: flex; gap: var(--space-3); flex-wrap: wrap; }
+.stat-box { background: var(--tarjeta); border-radius: var(--radius-lg); padding: var(--space-4); flex: 1; min-width: 140px; text-align: center; }
+.stat-box .num { font-size: var(--font-size-2xl); font-weight: bold; color: var(--principal); }
+.stat-box .label { font-size: var(--font-size-sm); color: var(--color-texto-suave); }
+label { display: block; margin: var(--space-3) 0 4px; font-weight: 600; font-size: var(--font-size-base); }
+input, select, textarea { width: 100%; padding: var(--space-2) var(--space-3); border: 1px solid var(--borde); border-radius: var(--radius-sm); font-size: var(--font-size-base); }
+.btn { background: var(--principal); color: white; border: none; padding: var(--space-2) var(--space-4); border-radius: var(--radius-sm); cursor: pointer; font-size: var(--font-size-base); margin: var(--space-3) var(--space-2) 0 0; }
+.btn.secondary { background: var(--color-neutro); }
+.btn.danger { background: var(--color-peligro); }
+.btn.small { padding: 4px var(--space-2); font-size: var(--font-size-sm); margin: 0 4px 0 0; }
+table { width: 100%; border-collapse: collapse; margin-top: var(--space-3); }
+th, td { text-align: left; padding: var(--space-2); border-bottom: 1px solid var(--borde); font-size: var(--font-size-base); }
+th { background: var(--tarjeta); }
+.message { padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); margin-top: var(--space-3); font-size: var(--font-size-base); }
+.message.success { background: var(--color-exito-fondo); color: var(--color-exito-texto); }
+.message.error { background: var(--color-error-fondo); color: var(--color-error-texto); }
+.foto { width: var(--foto-size); height: var(--foto-size); border-radius: var(--radius-md); object-fit: cover; border: 1px solid var(--borde); background: #fff; display: block; margin-top: var(--space-2); }
+.foto.mini { width: var(--foto-size-mini); height: var(--foto-size-mini); margin: 0; }
+.badge { padding: 3px var(--space-2); border-radius: 12px; font-size: var(--font-size-sm); color: white; }
+.badge.PROGRAMADA { background: var(--principal); } .badge.ATENDIDA { background: #27ae60; }
+.badge.CANCELADA { background: var(--color-peligro); } .badge.NO_ASISTIO { background: var(--color-neutro); }
+.badge.domicilio { background: var(--secundario); cursor: help; }
+
+.checkbox-linea { display: flex; align-items: center; gap: var(--space-2); font-weight: 600; margin-top: var(--space-3); }
+.checkbox-linea input { width: auto; }
+.login { max-width: 360px; margin: 80px auto; }
+
+/* ---------- Filtros opcionales (ley de Hick: se ocultan por defecto) ---------- */
+.filtros-avanzados { margin: var(--space-3) 0; }
+.filtros-avanzados summary { cursor: pointer; font-weight: 600; font-size: var(--font-size-base); color: var(--secundario); }
+.filtros-avanzados > label:first-of-type { margin-top: var(--space-3); }
+
+/* ---------- Skeletons de carga ---------- */
+.skeleton {
+  background: linear-gradient(90deg, var(--borde) 25%, var(--tarjeta) 37%, var(--borde) 63%);
+  background-size: 400% 100%;
+  animation: skeleton-shimmer 1.4s ease infinite;
+  border-radius: var(--radius-sm);
+  display: block;
+}
+@keyframes skeleton-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+/* Respeta a quien pidió menos animación en su sistema operativo (mínimo de accesibilidad). */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; }
+}
+
+/* ---------- Modal de confirmación ---------- */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; z-index: 50; }
+.modal { background: white; border-radius: var(--radius-lg); padding: var(--space-5); max-width: 320px; width: 90%; box-shadow: var(--sombra-modal); }
+.modal h2 { margin: 0 0 var(--space-2); font-size: var(--font-size-lg); }
+.modal p { margin: 0; color: var(--color-texto-suave); font-size: var(--font-size-base); }
+.modal-actions { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-5); }
+
+/* ---------- Pie de página con datos de la clínica ---------- */
+.pie-clinica { text-align: center; padding: var(--space-4) var(--space-5); font-size: var(--font-size-sm); color: var(--color-texto-suave); border-top: 1px solid var(--borde); }
+.pie-clinica p { margin: 2px 0; }
