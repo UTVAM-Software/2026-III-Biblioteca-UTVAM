@@ -544,7 +544,11 @@ function Configuracion() {
 // decisión rápida. Si en el futuro agregas más secciones, agrúpalas en
 // vez de sumarlas todas al mismo nivel.
 const ITEMS = [
+<<<<<<< HEAD
   ['dashboard', 'inicio', LayoutDashboard],
+=======
+  ['dashboard', 'Dashboard', LayoutDashboard],
+>>>>>>> c01421bbe3e85e21a8441ad958f06a6c5590d1d7
   ['pacientes', 'Pacientes', PawPrint],
   ['citas', 'Citas', CalendarDays],
   ['historial', 'Historial', History],

@@ -1,6 +1,6 @@
-# Sistema de Gestión veterinaria (PHP + React + MySQL)
+# Sistema WEB en base veterinaria (PHP + React + MySQL)
 
-Versión para consultorio veterinaria del sistema de Pacientes/Citas. Conserva la lógica original
+Versión para consultorio dental del sistema de Pacientes/Citas. Conserva la lógica original
 (Dashboard, Pacientes con foto, Citas, Historial, Configuración, colores y nombre configurables),
 pero ahora corre con **PHP** (servidor), **React** (pantalla) y **MySQL** (base de datos)
 en lugar de Google Apps Script + Google Sheets.
@@ -95,7 +95,7 @@ Cada vez que guardas un archivo, la página se actualiza sola. Para cambios en P
 ## PARTE 5 — Cómo modificar (lo más común)
 
 - **Textos y nombres:** títulos y etiquetas están en `frontend/src/App.jsx` (busca el texto y cámbialo). Nombre y colores del sistema: `config.php`.
-- **Opciones del campo Género:** en phpMyAdmin, tabla `generos`, agrega/edita filas.
+- **Opciones del campo Género:** en phpMyAdmin, tabla `especie`, agrega/edita filas.
 - **Agregar un campo (ejemplo: fecha de nacimiento del paciente):**
   1. phpMyAdmin → pestaña SQL: `ALTER TABLE pacientes ADD fecha_nacimiento DATE NULL;`
   2. `index.php`, en `case 'pacientes'`: agrega `fecha_nacimiento` al `SELECT` y al `INSERT` (con su `?` y su valor en el arreglo).
@@ -107,7 +107,7 @@ Cada vez que guardas un archivo, la página se actualiza sola. Para cambios en P
 Necesitas un hosting con **PHP 8.1+**, **MySQL** y **certificado SSL gratis** (casi todos los de cPanel lo tienen).
 
 1. **Crear la BD:** cPanel → *MySQL Databases* → crea una base, crea un usuario con contraseña fuerte y
-   asígnalo a la base con *All Privileges*. Anota los tres nombres (cPanel les pone un prefijo, ej. `micuenta_veterinaria`).
+   asígnalo a la base con *All Privileges*. Anota los tres nombres (cPanel les pone un prefijo, ej. `micuenta_dental`).
 2. **Importar tablas:** cPanel → *phpMyAdmin* → entra a tu base → *Importar* → `schema.sql`.
    Antes de importar, **borra las 2 primeras líneas** del archivo (`CREATE DATABASE` y `USE`), porque en hosting no puedes crear bases por SQL.
 3. **Editar `config.php`** con los datos reales: `host` (normalmente `localhost`), `name`, `user`, `pass` y el `hash` de tu contraseña
@@ -141,10 +141,6 @@ Necesitas un hosting con **PHP 8.1+**, **MySQL** y **certificado SSL gratis** (c
 | La foto no se sube | Pesa más de 3 MB, no es JPG/PNG/WEBP, o falta permiso en `storage/fotos`. Si es mayor a 2 MB, revisa `upload_max_filesize` en `php.ini`. |
 | `npm` no se reconoce | Cierra y reabre la terminal tras instalar Node. |
 | En hosting todo da 404 en `/api` | La carpeta debe llamarse exactamente `api` y estar dentro de `public_html`. |
-
-## PARTE 8 — Lo que este sistema NO tiene (léelo antes de ofrecérselo a un dentista real)
-
-- **Es un esqueleto de agenda + fichas, no un expediente clínico.** Falta: odontograma, historial de tratamientos, alergias/antecedentes estructurados, presupuestos/cobros, recetas, consentimientos.
 - **Un solo usuario**, sin roles (doctor/recepción) ni bitácora de quién cambió qué.
 - **Sin editar datos de un paciente ya guardado.** Sí se puede dar de baja (botón "Dar de baja" en Pacientes → Buscar): lo oculta de búsquedas y citas nuevas, pero conserva su historial. No hay un botón para editar nombre/especie/propietario todavía.
 - **Sin respaldos automáticos.** Configura respaldos de la BD *y* de `storage/fotos` (cPanel → *Backup*, o exportar desde phpMyAdmin cada semana).
