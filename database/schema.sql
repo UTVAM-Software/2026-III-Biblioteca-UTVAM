@@ -30,6 +30,8 @@ CREATE TABLE IF NOT EXISTS citas (
   hora TIME NOT NULL,
   motivo VARCHAR(200) NOT NULL DEFAULT '',
   estado ENUM('PROGRAMADA','ATENDIDA','CANCELADA','NO_ASISTIO') NOT NULL DEFAULT 'PROGRAMADA',
+  domicilio TINYINT(1) NOT NULL DEFAULT 0,
+  direccion_domicilio VARCHAR(200) NULL,
   observaciones TEXT NULL,
   usuario VARCHAR(60) NOT NULL DEFAULT '',
   creado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -50,11 +52,14 @@ CREATE TABLE IF NOT EXISTS registros_clinicos (
 ) ENGINE=InnoDB;
 
 -- ============================================================
--- MIGRACIÓN para una base de datos que ya tenías creada antes
--- de este cambio (ya tiene datos, así que no se puede recrear
--- la tabla). Corre esta línea UNA sola vez en phpMyAdmin, pestaña
--- SQL, dentro de tu base clinica_veterinaria. Si ya la corriste,
--- no la vuelvas a correr (dará un error de columna duplicada,
--- que puedes ignorar).
+-- MIGRACIÓN: SOLO para una base creada ANTES de estos cambios
+-- (ya tiene datos, así que no se puede recrear). En una instalación
+-- nueva NO hace falta: las tablas de arriba ya incluyen las columnas.
+-- Para usarla, quita los "-- " del inicio de las líneas que te falten
+-- y córrelas UNA sola vez en phpMyAdmin (pestaña SQL, dentro de la
+-- base clinica_veterinaria). Si una columna ya existe, dará error de
+-- "columna duplicada": ignóralo, significa que esa ya estaba.
 -- ============================================================
-ALTER TABLE pacientes ADD COLUMN activo TINYINT(1) NOT NULL DEFAULT 1;
+-- ALTER TABLE pacientes ADD COLUMN activo TINYINT(1) NOT NULL DEFAULT 1;
+-- ALTER TABLE citas ADD COLUMN domicilio TINYINT(1) NOT NULL DEFAULT 0;
+-- ALTER TABLE citas ADD COLUMN direccion_domicilio VARCHAR(200) NULL;
