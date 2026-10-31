@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   LayoutDashboard, PawPrint, CalendarDays, History, Settings,
-  LogOut, ChevronLeft, ChevronRight, Stethoscope,
+  LogOut, ChevronLeft, ChevronRight, Stethoscope, Database,
 } from 'lucide-react';
 import { api, urlFoto, urlCarnet } from './api.js';
 
@@ -538,23 +538,43 @@ function Configuracion() {
   );
 }
 
+// ---------------- CRUD GENERAL ----------------
+const CRUD_ENTIDADES = {
+  pacientes: { titulo: 'Pacientes', campos: [['nombre','Nombre','text',true],['especie','Especie','text'],['propietario','Propietario','text'],['telefono','Teléfono','tel'],['notas','Notas','textarea'],['activo','Estado','select',true,[['1','Activo'],['0','Inactivo']]]], columnas: ['nombre','especie','propietario','telefono','activo'] },
+  citas: { titulo: 'Citas', campos: [['paciente_id','Paciente','paciente',true],['fecha','Fecha','date',true],['hora','Hora','time',true],['motivo','Motivo','text'],['estado','Estado','select',true,[['PROGRAMADA','Programada'],['ATENDIDA','Atendida'],['CANCELADA','Cancelada'],['NO_ASISTIO','No asistió']]],['observaciones','Observaciones','textarea'],['domicilio','A domicilio','select',true,[['0','No'],['1','Sí']]],['direccion_domicilio','Dirección a domicilio','text']], columnas: ['paciente','fecha','hora','motivo','estado'] },
+  registros: { titulo: 'Registros clínicos', campos: [['paciente_id','Paciente','paciente',true],['fecha','Fecha','date',true],['tipo','Tipo','select',true,[['CONSULTA','Consulta'],['VACUNA','Vacuna'],['TRATAMIENTO','Tratamiento'],['CIRUGIA','Cirugía'],['OTRO','Otro']]],['descripcion','Descripción','textarea',true],['peso','Peso (kg)','number']], columnas: ['paciente','fecha','tipo','descripcion','peso'] },
+  especies: { titulo: 'Especies', campos: [['nombre','Nombre','text',true]], columnas: ['nombre'] },
+};
+function GestionCRUD() {
+  const [entidad,setEntidad]=useState('pacientes'), [filas,setFilas]=useState([]), [pacientes,setPacientes]=useState([]), [form,setForm]=useState({}), [editando,setEditando]=useState(null), [q,setQ]=useState(''), [msg,setMsg]=useState(null), [pagina,setPagina]=useState(0);
+  const def=CRUD_ENTIDADES[entidad];
+  const cargar=async()=>{try{setFilas(await api('crud',{params:{entidad,q,incluirInactivos:entidad==='pacientes'?'1':''}}));}catch(e){setMsg({tipo:'error',texto:e.message});}};
+  useEffect(()=>{cargar();api('crud',{params:{entidad:'pacientes'}}).then(setPacientes).catch(()=>{});},[entidad]);
+  useEffect(()=>{setPagina(0);const t=setTimeout(cargar,180);return()=>clearTimeout(t);},[q]);
+  const reset=()=>{setForm({});setEditando(null);};
+  const iniciarEdicion=(fila)=>{setEditando(fila.id);const f={...fila};if(f.hora)f.hora=String(f.hora).slice(0,5);for(const [k] of def.campos)f[k]=f[k]??'';setForm(f);window.scrollTo({top:0,behavior:'smooth'});};
+  const guardar=async(e)=>{e.preventDefault();try{const r=await api('crud',{method:'POST',body:{...form,entidad,accion:editando?'actualizar':'crear',id:editando}});setMsg({tipo:'success',texto:r.mensaje});reset();await cargar();}catch(err){setMsg({tipo:'error',texto:err.message});}};
+  const borrar=async(fila)=>{if(!window.confirm(`¿${entidad==='pacientes'?'Dar de baja':'Eliminar'} este registro?`))return;try{const r=await api('crud',{method:'POST',body:{entidad,accion:'eliminar',id:fila.id,nombre:fila.nombre}});setMsg({tipo:'success',texto:r.mensaje});await cargar();}catch(e){setMsg({tipo:'error',texto:e.message});}};
+  const campo=(key,label,type,required,options)=> <label key={key}>{label}{type==='textarea'?<textarea rows="3" required={!!required} value={form[key]??''} onChange={e=>setForm({...form,[key]:e.target.value})}/>:type==='paciente'?<select required value={form[key]??''} onChange={e=>setForm({...form,[key]:e.target.value})}><option value="">Selecciona paciente</option>{pacientes.map(p=><option key={p.id} value={p.id}>{p.nombre} — {p.propietario}</option>)}</select>:type==='select'?<select required={!!required} value={form[key]??(key==='activo'?'1':'')} onChange={e=>setForm({...form,[key]:e.target.value})}>{(options??[]).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>:<input type={type} required={!!required} min={type==='number'?'0':undefined} step={type==='number'?'0.01':undefined} value={form[key]??''} onChange={e=>setForm({...form,[key]:e.target.value})}/>}</label>;
+  const paginaFilas=filas.slice(pagina*10,(pagina+1)*10), paginas=Math.max(1,Math.ceil(filas.length/10));
+  return <><form className="card crud-form" onSubmit={guardar}><h2>{editando?'Editar':'Nuevo'} · {def.titulo}</h2><div className="crud-fields">{def.campos.map(c=>campo(...c))}</div><button className="btn" type="submit">{editando?'Guardar cambios':'Crear registro'}</button>{editando&&<button className="btn secondary" type="button" onClick={reset}>Cancelar edición</button>}<Msg msg={msg}/></form>
+  <section className="card"><div className="crud-toolbar"><h2>Listado · {def.titulo}</h2><select aria-label="Entidad" value={entidad} onChange={e=>{setEntidad(e.target.value);setQ('');reset();setPagina(0);setMsg(null);}}>{Object.entries(CRUD_ENTIDADES).map(([k,v])=><option key={k} value={k}>{v.titulo}</option>)}</select><input aria-label="Buscar" placeholder="Buscar en el listado..." value={q} onChange={e=>setQ(e.target.value)}/></div><div className="table-scroll"><table><thead><tr>{def.columnas.map(c=><th key={c}>{c==='activo'?'Estado':c==='paciente'?'Paciente':c==='descripcion'?'Descripción':c[0].toUpperCase()+c.slice(1)}</th>)}<th>Acciones</th></tr></thead><tbody>{paginaFilas.map(f=><tr key={f.id}>{def.columnas.map(c=><td key={c}>{c==='activo'?(Number(f[c])?'Activo':'Inactivo'):f[c]}</td>)}<td><button className="btn small" onClick={()=>iniciarEdicion(f)}>Editar</button><button className="btn small danger" onClick={()=>borrar(f)}>{entidad==='pacientes'?'Dar de baja':'Eliminar'}</button></td></tr>)}{!filas.length&&<tr><td colSpan={def.columnas.length+1}>No hay registros para mostrar.</td></tr>}</tbody></table></div><div className="crud-pages"><button className="btn small secondary" disabled={pagina===0} onClick={()=>setPagina(p=>p-1)}>Anterior</button><span>Página {pagina+1} de {paginas} · {filas.length} registros</span><button className="btn small secondary" disabled={pagina+1>=paginas} onClick={()=>setPagina(p=>p+1)}>Siguiente</button></div></section></>;
+}
+
 // ---------------- SIDEBAR ----------------
 // Ley de Hick: 5 opciones visibles a la vez, sin submenús — mientras el
 // menú no crezca de forma significativa, cada clic sigue siendo una
 // decisión rápida. Si en el futuro agregas más secciones, agrúpalas en
 // vez de sumarlas todas al mismo nivel.
 const ITEMS = [
-<<<<<<< HEAD
-  ['dashboard', 'inicio', LayoutDashboard],
-=======
   ['dashboard', 'Dashboard', LayoutDashboard],
->>>>>>> c01421bbe3e85e21a8441ad958f06a6c5590d1d7
   ['pacientes', 'Pacientes', PawPrint],
   ['citas', 'Citas', CalendarDays],
   ['historial', 'Historial', History],
+  ['crud', 'Administrar', Database],
   ['config', 'Configuración', Settings],
 ];
-const VISTAS = { dashboard: Dashboard, pacientes: Pacientes, citas: Citas, historial: Historial, config: Configuracion };
+const VISTAS = { dashboard: Dashboard, pacientes: Pacientes, citas: Citas, historial: Historial, crud: GestionCRUD, config: Configuracion };
 
 function Sidebar({ tab, setTab, colapsado, setColapsado, nombreCorto, onPedirSalir }) {
   return (

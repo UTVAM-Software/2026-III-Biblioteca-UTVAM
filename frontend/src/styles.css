@@ -117,3 +117,11 @@ th { background: var(--tarjeta); }
 /* ---------- Pie de página con datos de la clínica ---------- */
 .pie-clinica { text-align: center; padding: var(--space-4) var(--space-5); font-size: var(--font-size-sm); color: var(--color-texto-suave); border-top: 1px solid var(--borde); }
 .pie-clinica p { margin: 2px 0; }
+.crud-form .crud-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px 16px; margin: 12px 0 18px; }
+.crud-fields label { display: flex; flex-direction: column; gap: 6px; }
+.crud-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
+.crud-toolbar h2 { margin-right: auto; }
+.crud-toolbar input { min-width: 220px; }
+.table-scroll { overflow-x: auto; }
+.table-scroll table { min-width: 680px; }
+.crud-pages { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 14px; }

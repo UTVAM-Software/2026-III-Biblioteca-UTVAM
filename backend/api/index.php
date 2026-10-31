@@ -73,6 +73,90 @@ try {
     if (empty($_SESSION['usuario'])) fail('Debes iniciar sesión.', 401);
 
     switch ($r) {
+        // CRUD de administración para el entregable 03-A. Los nombres de
+        // tabla/columna son constantes internas y todas las entradas usan binds.
+        case 'crud':
+            $entidad = (string)($_GET['entidad'] ?? $in['entidad'] ?? '');
+            $accion = (string)($in['accion'] ?? '');
+            $id = (int)($in['id'] ?? 0);
+            $catalogo = [
+                'pacientes' => ['table'=>'pacientes','fields'=>['nombre','especie','propietario','telefono','notas','activo'],'search'=>['nombre','especie','propietario','telefono'],'order'=>'nombre'],
+                'citas' => ['table'=>'citas','fields'=>['paciente_id','fecha','hora','motivo','estado','observaciones','domicilio','direccion_domicilio'],'search'=>['motivo','estado'],'order'=>'fecha DESC, hora DESC'],
+                'registros' => ['table'=>'registros_clinicos','fields'=>['paciente_id','fecha','tipo','descripcion','peso'],'search'=>['tipo','descripcion'],'order'=>'fecha DESC, id DESC'],
+                'especies' => ['table'=>'especies','fields'=>['nombre'],'search'=>['nombre'],'order'=>'nombre'],
+            ];
+            if (!isset($catalogo[$entidad])) fail('Entidad no válida.');
+            $def = $catalogo[$entidad]; $pdo = db();
+            if ($m === 'GET') {
+                $q = trim((string)($_GET['q'] ?? ''));
+                $where = ''; $params = [];
+                if ($entidad === 'pacientes' && ($_GET['incluirInactivos'] ?? '') !== '1') $where = ' WHERE activo = 1';
+                if ($q !== '') {
+                    $parts = [];
+                    foreach ($def['search'] as $col) { $parts[] = "$col LIKE ?"; $params[] = "%$q%"; }
+                    $where .= ($where === '' ? ' WHERE ' : ' AND ') . '(' . implode(' OR ', $parts) . ')';
+                }
+                if ($entidad === 'citas') {
+                    $sql = 'SELECT c.id,c.paciente_id,p.nombre AS paciente,c.fecha,TIME_FORMAT(c.hora,"%H:%i") hora,c.motivo,c.estado,c.observaciones,c.domicilio,c.direccion_domicilio FROM citas c JOIN pacientes p ON p.id=c.paciente_id' . ($where ? str_replace(['paciente_id','motivo','estado'],['c.paciente_id','c.motivo','c.estado'],$where) : '') . ' ORDER BY c.fecha DESC,c.hora DESC';
+                } elseif ($entidad === 'registros') {
+                    $sql = 'SELECT r.id,r.paciente_id,p.nombre AS paciente,r.fecha,r.tipo,r.descripcion,r.peso FROM registros_clinicos r JOIN pacientes p ON p.id=r.paciente_id' . ($where ? str_replace(['tipo','descripcion'],['r.tipo','r.descripcion'],$where) : '') . ' ORDER BY r.fecha DESC,r.id DESC';
+                } else $sql = 'SELECT id,' . implode(',', $def['fields']) . ' FROM ' . $def['table'] . $where . ' ORDER BY ' . $def['order'];
+                $s = $pdo->prepare($sql); $s->execute($params); out($s->fetchAll());
+            }
+            if ($m !== 'POST') fail('Método no permitido.', 405);
+            if (!in_array($accion, ['crear','actualizar','eliminar'], true)) fail('Acción no válida.');
+            if ($accion === 'eliminar') {
+                if (!$id) fail('Falta indicar el registro.');
+                if ($entidad === 'pacientes') {
+                    $pdo->beginTransaction();
+                    $pdo->prepare("UPDATE citas SET estado='CANCELADA' WHERE paciente_id=? AND estado='PROGRAMADA'")->execute([$id]);
+                    $s=$pdo->prepare('UPDATE pacientes SET activo=0 WHERE id=?'); $s->execute([$id]);
+                    $pdo->commit(); out(['ok'=>true,'mensaje'=>'Paciente dado de baja; historial conservado.']);
+                }
+                if ($entidad === 'especies') {
+                    $nombre=(string)($in['nombre'] ?? '');
+                    $s=$pdo->prepare('SELECT COUNT(*) FROM pacientes WHERE especie=?'); $s->execute([$nombre]);
+                    if ((int)$s->fetchColumn()) fail('No se puede eliminar: hay pacientes que usan esta especie.');
+                }
+                $s=$pdo->prepare('DELETE FROM ' . $def['table'] . ' WHERE id=?'); $s->execute([$id]);
+                if (!$s->rowCount()) fail('Registro no encontrado.',404);
+                out(['ok'=>true,'mensaje'=>'Registro eliminado.']);
+            }
+            if ($accion === 'actualizar' && !$id) fail('Falta indicar el registro.');
+            $v=[];
+            foreach ($def['fields'] as $field) $v[$field] = $in[$field] ?? null;
+            foreach (['nombre','especie','propietario','telefono','motivo','observaciones','direccion_domicilio','descripcion','peso'] as $campo) if (isset($v[$campo]) && is_string($v[$campo])) $v[$campo]=trim($v[$campo]);
+            if ($entidad==='pacientes' && mb_strlen((string)$v['nombre'])<2) fail('El nombre requiere al menos 2 caracteres.');
+            if ($entidad==='especies' && ($v['nombre']==='' || mb_strlen((string)$v['nombre'])>60)) fail('Indica una especie de hasta 60 caracteres.');
+            if ($entidad==='especies') {
+                $sql='SELECT COUNT(*) FROM especies WHERE nombre=?' . ($accion==='actualizar' ? ' AND id<>?' : '');
+                $args=[$v['nombre']]; if ($accion==='actualizar') $args[]=$id;
+                $s=$pdo->prepare($sql); $s->execute($args); if ((int)$s->fetchColumn()) fail('Ya existe una especie con ese nombre.');
+            }
+            if ($entidad==='citas' && (!(int)$v['paciente_id'] || !fechaValida((string)$v['fecha']) || !horaValida(substr((string)$v['hora'],0,5)) || !in_array($v['estado'],ESTADOS,true))) fail('Paciente, fecha, hora o estado inválidos.');
+            if ($entidad==='registros' && (!(int)$v['paciente_id'] || !fechaValida((string)$v['fecha']) || !in_array($v['tipo'],['CONSULTA','VACUNA','TRATAMIENTO','CIRUGIA','OTRO'],true) || mb_strlen((string)$v['descripcion'])<3 || ($v['peso']!==null && $v['peso']!=='' && (!is_numeric($v['peso']) || (float)$v['peso']<0 || (float)$v['peso']>9999.99)))) fail('Datos del registro clínico inválidos.');
+            if ($entidad==='citas' && !in_array((string)$v['domicilio'],['0','1',''],true)) fail('Valor de domicilio inválido.');
+            if ($entidad==='citas' && (int)$v['domicilio']===1 && trim((string)$v['direccion_domicilio'])==='') fail('Indica la dirección del servicio a domicilio.');
+            if (in_array($entidad,['citas','registros'],true)) {
+                $s=$pdo->prepare('SELECT COUNT(*) FROM pacientes WHERE id=?' . ($entidad==='citas' ? ' AND activo=1' : ''));
+                $s->execute([(int)$v['paciente_id']]); if (!(int)$s->fetchColumn()) fail('El paciente seleccionado no está disponible.');
+            }
+            if ($entidad==='citas' && $v['estado']==='PROGRAMADA') {
+                $sql="SELECT COUNT(*) FROM citas WHERE fecha=? AND hora=? AND estado='PROGRAMADA'";
+                $args=[$v['fecha'],$v['hora']]; if ($accion==='actualizar') { $sql.=' AND id<>?'; $args[]=$id; }
+                $s=$pdo->prepare($sql); $s->execute($args); if ((int)$s->fetchColumn()) fail('Ya existe una cita programada en esa fecha y hora.');
+            }
+            if ($entidad==='registros' && ($v['peso']==='' || $v['peso']===null)) $v['peso']=null;
+            $columns=$def['fields']; $values=array_values($v);
+            if ($accion==='crear') {
+                if ($entidad==='citas') { $columns[]='usuario'; $values[]=(string)$_SESSION['usuario']; }
+                $sql='INSERT INTO '.$def['table'].' ('.implode(',',$columns).') VALUES ('.implode(',',array_fill(0,count($columns),'?')).')';
+                $pdo->prepare($sql)->execute($values); out(['ok'=>true,'id'=>(int)$pdo->lastInsertId(),'mensaje'=>'Registro creado.'],201);
+            }
+            $sets=implode(',',array_map(fn($c)=>"$c=?",$columns)); $values[]=$id;
+            $s=$pdo->prepare('UPDATE '.$def['table'].' SET '.$sets.' WHERE id=?'); $s->execute($values);
+            out(['ok'=>true,'mensaje'=>'Cambios guardados.']);
+
         case 'resumen':
             $hoy = date('Y-m-d');
             $sem = date('Y-m-d', strtotime('+7 days'));
