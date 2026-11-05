@@ -1,0 +1,64 @@
+/* ============================================================
+   DESIGN TOKENS
+   Única fuente de valores reutilizables de la interfaz.
+   - Los colores de marca (--principal, --secundario, etc.) tienen
+     un valor por defecto aquí, pero App.jsx los SOBREESCRIBE en
+     tiempo real con los que vienen de config.php (uno por cliente).
+   - Todo lo demás (espaciado, tipografía, radios, sombras,
+     tamaños de layout) es fijo: si cambias un valor aquí, cambia
+     en toda la app. No repitas estos números sueltos en styles.css.
+   ============================================================ */
+:root {
+  /* ---- Color de marca (editable por cliente vía config.php) ---- */
+  --principal: #2E86AB;
+  --secundario: #1C5F7B;
+  --acento: #5DADE2;
+  --fondo: #EAF6FB;
+  --fondoContenido: #FAFBFC;
+  --borde: #E5F2F7;
+  --tarjeta: #F0F8FC;
+
+  /* ---- Color semántico fijo (no depende del cliente) ---- */
+  --color-texto: #223344;
+  --color-texto-suave: #667788;
+  --color-exito-fondo: #d4edda;
+  --color-exito-texto: #155724;
+  --color-error-fondo: #f8d7da;
+  --color-error-texto: #721c24;
+  --color-peligro: #c0392b;
+  --color-neutro: #8a94a3;
+  --color-foco: #ffb703; /* anillo de foco: debe verse sobre cualquier color de marca */
+
+  /* ---- Espaciado (escala de 4px) ---- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* ---- Tipografía ---- */
+  --font-base: 'Segoe UI', Arial, sans-serif;
+  --font-size-sm: 12px;
+  --font-size-base: 14px;
+  --font-size-md: 15px;
+  --font-size-lg: 18px;
+  --font-size-xl: 20px;
+  --font-size-2xl: 28px;
+
+  /* ---- Radios y sombras ---- */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --sombra-modal: 0 10px 30px rgba(0, 0, 0, .2);
+
+  /* ---- Transiciones ---- */
+  --transicion-rapida: .15s ease;
+
+  /* ---- Medidas de layout fijas ---- */
+  --sidebar-width: 220px;
+  --sidebar-width-collapsed: 64px;
+  --foto-size: 90px;
+  --foto-size-mini: 40px;
+}

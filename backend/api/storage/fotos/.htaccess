@@ -1,0 +1,2 @@
+# Las fotos solo se sirven desde index.php (con sesion), nunca por URL directa.
+Require all denied
