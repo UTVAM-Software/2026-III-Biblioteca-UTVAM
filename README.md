@@ -28,5 +28,3 @@ Esta edición mantiene el frontend en HTML, CSS y JavaScript nativo. Recupera el
 - El servidor vuelve a comprobar el permiso en cada petición. El menú solo oculta las opciones no autorizadas.
 - Se conservan pacientes, expedientes, fotos, citas, historial, administración, diagnóstico y carnets PDF.
 - FPDF está incluido para imprimir carnets.
-
-Si ya usas datos reales, respalda la base antes de importar SQL. No reemplaces `config.php` ni borres `backend/api/storage/fotos` al actualizar.
