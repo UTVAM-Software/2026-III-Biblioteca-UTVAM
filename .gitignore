@@ -10,3 +10,9 @@ repomix-output.xml
 Thumbs.db
 .vscode/
 .idea/
+
+# Configuración y fotos locales
+backend/api/config.php
+backend/api/storage/fotos/*
+!backend/api/storage/fotos/.gitkeep
+frontend/node_modules/

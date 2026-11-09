@@ -44,6 +44,41 @@ function horaValida(string $h): bool {
     return $d && $d->format('H:i') === $h;
 }
 
+// ---------- SEGURIDAD: usuario actual y permisos ----------
+// Los permisos se leen de la BD en CADA petición (no se guardan en la sesión):
+// así, revocar un permiso o desactivar un usuario surte efecto de inmediato.
+function usuarioActual(): ?array {
+    static $yo = false;
+    if ($yo !== false) return $yo;
+    $uid = (int)($_SESSION['uid'] ?? 0);
+    if (!$uid) return $yo = null;
+    $s = db()->prepare('SELECT u.id, u.usuario, u.nombre, u.rol_id, r.nombre AS rol
+                        FROM usuarios u JOIN roles r ON r.id = u.rol_id
+                        WHERE u.id = ? AND u.activo = 1');
+    $s->execute([$uid]);
+    return $yo = ($s->fetch() ?: null);
+}
+function permisosUsuario(): array {
+    static $cache = null;
+    if ($cache !== null) return $cache;
+    $yo = usuarioActual();
+    if (!$yo) return $cache = [];
+    $s = db()->prepare('SELECT p.codigo FROM rol_permiso rp JOIN permisos p ON p.id = rp.permiso_id WHERE rp.rol_id = ?');
+    $s->execute([$yo['rol_id']]);
+    return $cache = $s->fetchAll(PDO::FETCH_COLUMN);
+}
+function puede(string $permiso): bool { return in_array($permiso, permisosUsuario(), true); }
+function requiere(string $permiso): void {
+    if (!puede($permiso)) fail('No tienes permiso para esta acción (' . $permiso . ').', 403);
+}
+// ¿Queda otro usuario activo con rol protegido (Dueño) además de $excluirId?
+function quedaOtroDueno(int $excluirId): bool {
+    $s = db()->prepare('SELECT COUNT(*) FROM usuarios u JOIN roles r ON r.id = u.rol_id
+                        WHERE r.sistema = 1 AND u.activo = 1 AND u.id <> ?');
+    $s->execute([$excluirId]);
+    return (int)$s->fetchColumn() > 0;
+}
+
 $r = $_GET['r'] ?? '';
 $m = $_SERVER['REQUEST_METHOD'];
 $in = $_POST ?: (json_decode(file_get_contents('php://input') ?: '', true) ?: []);
@@ -54,14 +89,33 @@ try {
         out(['nombreSistema' => $cfg['nombreSistema'], 'nombreCorto' => $cfg['nombreCorto'], 'colores' => $cfg['colores'], 'clinica' => $cfg['clinica']]);
     }
     if ($r === 'sesion') {
-        out(['autenticado' => !empty($_SESSION['usuario'])]);
+        $yo = usuarioActual();
+        if (!$yo) out(['autenticado' => false]);
+        out(['autenticado' => true, 'usuario' => $yo, 'permisos' => permisosUsuario()]);
     }
     if ($r === 'login' && $m === 'POST') {
-        $ok = hash_equals($cfg['admin']['usuario'], (string)($in['usuario'] ?? ''))
-           && password_verify((string)($in['clave'] ?? ''), $cfg['admin']['hash']);
-        if (!$ok) { sleep(1); fail('Usuario o contraseña incorrectos.', 401); }
+        $pdo = db();
+        $u = trim((string)($in['usuario'] ?? ''));
+        $c = (string)($in['clave'] ?? '');
+        if (!$pdo->query("SHOW TABLES LIKE 'usuarios'")->fetchColumn()) {
+            fail('Falta importar database/migracion_usuarios_permisos.sql en la base de datos.', 500);
+        }
+        // Primer arranque: si aún no hay usuarios, el admin de config.php se crea como "Dueño".
+        if ((int)$pdo->query('SELECT COUNT(*) FROM usuarios')->fetchColumn() === 0
+            && $u !== '' && hash_equals($cfg['admin']['usuario'], $u)
+            && password_verify($c, $cfg['admin']['hash'])) {
+            $rolId = (int)$pdo->query("SELECT id FROM roles WHERE nombre = 'Dueño'")->fetchColumn();
+            if (!$rolId) fail('Falta el rol Dueño: importa database/migracion_usuarios_permisos.sql.', 500);
+            $pdo->prepare('INSERT INTO usuarios (usuario, nombre, clave_hash, rol_id) VALUES (?,?,?,?)')
+                ->execute([$u, 'Dueño', $cfg['admin']['hash'], $rolId]);
+        }
+        $s = $pdo->prepare('SELECT id, usuario, clave_hash FROM usuarios WHERE usuario = ? AND activo = 1');
+        $s->execute([$u]);
+        $row = $s->fetch();
+        if (!$row || !password_verify($c, $row['clave_hash'])) { sleep(1); fail('Usuario o contraseña incorrectos.', 401); }
         session_regenerate_id(true);
-        $_SESSION['usuario'] = $cfg['admin']['usuario'];
+        $_SESSION['uid'] = (int)$row['id'];
+        $_SESSION['usuario'] = $row['usuario'];
         out(['ok' => true]);
     }
     if ($r === 'logout') {
@@ -70,7 +124,10 @@ try {
     }
 
     // ---------- TODO LO DEMÁS REQUIERE SESIÓN ----------
-    if (empty($_SESSION['usuario'])) fail('Debes iniciar sesión.', 401);
+    if (empty($_SESSION['uid']) || !usuarioActual()) {
+        $_SESSION = [];
+        fail('Debes iniciar sesión.', 401);
+    }
 
     switch ($r) {
         // CRUD de administración para el entregable 03-A. Los nombres de
@@ -87,6 +144,9 @@ try {
             ];
             if (!isset($catalogo[$entidad])) fail('Entidad no válida.');
             $def = $catalogo[$entidad]; $pdo = db();
+            $mapaPermiso = ['crear' => 'crear', 'actualizar' => 'editar', 'eliminar' => 'eliminar'];
+            if ($m === 'GET') requiere("$entidad.ver");
+            elseif ($m === 'POST' && isset($mapaPermiso[$accion])) requiere("$entidad." . $mapaPermiso[$accion]);
             if ($m === 'GET') {
                 $q = trim((string)($_GET['q'] ?? ''));
                 $where = ''; $params = [];
@@ -126,6 +186,11 @@ try {
             $v=[];
             foreach ($def['fields'] as $field) $v[$field] = $in[$field] ?? null;
             foreach (['nombre','especie','propietario','telefono','motivo','observaciones','direccion_domicilio','descripcion','peso'] as $campo) if (isset($v[$campo]) && is_string($v[$campo])) $v[$campo]=trim($v[$campo]);
+            // Columnas NOT NULL con default: un campo omitido llega como null y MySQL (modo estricto) lo rechaza.
+            foreach (['especie','propietario','telefono','motivo'] as $campoTexto) if (array_key_exists($campoTexto,$v) && $v[$campoTexto]===null) $v[$campoTexto]='';
+            if (array_key_exists('activo',$v)) $v['activo']=(string)($v['activo'] ?? '1')==='0' ? 0 : 1;
+            if (array_key_exists('domicilio',$v)) $v['domicilio']=(string)($v['domicilio'] ?? '0')==='1' ? 1 : 0;
+            if ($entidad==='citas' && (int)$v['domicilio']===0) $v['direccion_domicilio']=null;
             if ($entidad==='pacientes' && mb_strlen((string)$v['nombre'])<2) fail('El nombre requiere al menos 2 caracteres.');
             if ($entidad==='especies' && ($v['nombre']==='' || mb_strlen((string)$v['nombre'])>60)) fail('Indica una especie de hasta 60 caracteres.');
             if ($entidad==='especies') {
@@ -173,6 +238,7 @@ try {
 
         case 'pacientes':
             if ($m === 'GET') {
+                requiere('pacientes.ver');
                 $t = trim((string)($_GET['q'] ?? ''));
                 if ($t === '') {
                     $rows = db()->query('SELECT id, nombre, especie, propietario, telefono, foto, notas FROM pacientes WHERE activo = 1 ORDER BY nombre')->fetchAll();
@@ -185,6 +251,7 @@ try {
                 out($rows);
             }
             if ($m === 'POST') {
+                requiere('pacientes.crear');
                 $nombre = trim((string)($in['nombre'] ?? ''));
                 if (mb_strlen($nombre) < 2) fail('El nombre de la mascota es obligatorio (mínimo 2 caracteres).');
 
@@ -213,6 +280,7 @@ try {
             fail('Método no permitido.', 405);
 
         case 'paciente_baja':
+            requiere('pacientes.eliminar');
             if ($m !== 'POST') fail('Método no permitido.', 405);
             $pid = (int)($in['id'] ?? 0);
             if (!$pid) fail('Falta indicar el paciente.');
@@ -231,6 +299,7 @@ try {
             out(['ok' => true, 'mensaje' => "$nombre fue dado de baja. Su historial de citas se conservó."]);
 
         case 'foto':
+            requiere('pacientes.ver');
             $s = db()->prepare('SELECT foto FROM pacientes WHERE id = ?');
             $s->execute([(int)($_GET['id'] ?? 0)]);
             $f = (string)$s->fetchColumn();
@@ -243,6 +312,7 @@ try {
 
         case 'citas':
             if ($m === 'GET') {
+                requiere('citas.ver');
                 $sql = 'SELECT c.id, c.paciente_id AS idPaciente, p.nombre AS nombrePaciente, c.fecha,
                                TIME_FORMAT(c.hora, "%H:%i") AS hora, c.motivo, c.estado, c.observaciones,
                                c.domicilio, c.direccion_domicilio AS direccionDomicilio
@@ -256,6 +326,7 @@ try {
                 out($s->fetchAll());
             }
             if ($m === 'POST') {
+                requiere('citas.crear');
                 $pid = (int)($in['idPaciente'] ?? 0);
                 $fecha = (string)($in['fecha'] ?? '');
                 $hora = (string)($in['hora'] ?? '');
@@ -290,6 +361,7 @@ try {
             fail('Método no permitido.', 405);
 
         case 'cita_estado':
+            requiere('citas.editar');
             $estado = (string)($in['estado'] ?? '');
             if ($m !== 'POST' || !in_array($estado, ESTADOS, true)) fail('Datos inválidos.');
             $s = db()->prepare('UPDATE citas SET estado = ? WHERE id = ?');
@@ -297,6 +369,7 @@ try {
             out(['ok' => true, 'mensaje' => 'Estado de la cita actualizado.']);
         case 'registros':
             if ($m === 'GET') {
+                requiere('registros.ver');
                 $pid = (int)($_GET['idPaciente'] ?? 0);
                 if (!$pid) fail('Falta indicar el paciente.');
                 $s = db()->prepare('SELECT id, fecha, tipo, descripcion, peso FROM registros_clinicos WHERE paciente_id = ? ORDER BY fecha DESC, id DESC');
@@ -304,6 +377,7 @@ try {
                 out($s->fetchAll());
             }
             if ($m === 'POST') {
+                requiere('registros.crear');
                 $pid = (int)($in['idPaciente'] ?? 0);
                 $fecha = (string)($in['fecha'] ?? '');
                 $tipo = (string)($in['tipo'] ?? '');
@@ -328,6 +402,7 @@ try {
             fail('Método no permitido.', 405);
             
 case 'carnet':
+    requiere('pacientes.ver');
     if ($m !== 'GET') fail('Método no permitido.', 405);
     $pid = (int)($_GET['id'] ?? 0);
     $s = db()->prepare('SELECT * FROM pacientes WHERE id = ?');
@@ -905,13 +980,198 @@ case 'carnet':
 
     exit;
 
+        // ---------- ENTREGABLE 03-A: USUARIOS, PERFILES/ROLES Y PERMISOS ----------
+        case 'usuarios':
+            $pdo = db();
+            if ($m === 'GET') {
+                requiere('usuarios.ver');
+                $q = trim((string)($_GET['q'] ?? ''));
+                $sql = 'SELECT u.id, u.usuario, u.nombre, u.rol_id, r.nombre AS rol, u.activo, u.creado_en
+                        FROM usuarios u JOIN roles r ON r.id = u.rol_id';
+                $par = [];
+                if ($q !== '') { $sql .= ' WHERE u.usuario LIKE ? OR u.nombre LIKE ? OR r.nombre LIKE ?'; $par = ["%$q%", "%$q%", "%$q%"]; }
+                $s = $pdo->prepare($sql . ' ORDER BY u.usuario'); $s->execute($par);
+                out($s->fetchAll());
+            }
+            if ($m !== 'POST') fail('Método no permitido.', 405);
+            $accion = (string)($in['accion'] ?? '');
+            $id = (int)($in['id'] ?? 0);
+            $miId = (int)usuarioActual()['id'];
+
+            if ($accion === 'eliminar') {
+                requiere('usuarios.eliminar');
+                if (!$id) fail('Falta indicar el usuario.');
+                if ($id === $miId) fail('No puedes eliminar tu propio usuario.');
+                $s = $pdo->prepare('SELECT r.sistema FROM usuarios u JOIN roles r ON r.id = u.rol_id WHERE u.id = ?');
+                $s->execute([$id]);
+                $t = $s->fetch();
+                if (!$t) fail('Usuario no encontrado.', 404);
+                if ((int)$t['sistema'] && !quedaOtroDueno($id)) fail('Debe quedar al menos un Dueño activo.');
+                $pdo->prepare('DELETE FROM usuarios WHERE id = ?')->execute([$id]);
+                out(['ok' => true, 'mensaje' => 'Usuario eliminado.']);
+            }
+            if (!in_array($accion, ['crear', 'actualizar'], true)) fail('Acción no válida.');
+            requiere($accion === 'crear' ? 'usuarios.crear' : 'usuarios.editar');
+
+            $usuario = trim((string)($in['usuario'] ?? ''));
+            $nombre = trim((string)($in['nombre'] ?? ''));
+            $clave = (string)($in['clave'] ?? '');
+            $rolId = (int)($in['rol_id'] ?? 0);
+            $activo = (string)($in['activo'] ?? '1') === '0' ? 0 : 1;
+            if (!preg_match('/^[A-Za-z0-9_.-]{3,60}$/', $usuario)) fail('El usuario debe tener de 3 a 60 caracteres: letras, números, punto, guion o guion bajo.');
+            if (mb_strlen($nombre) > 120) fail('El nombre admite hasta 120 caracteres.');
+            if (($accion === 'crear' || $clave !== '') && mb_strlen($clave) < 8) fail('La contraseña debe tener al menos 8 caracteres.');
+            $s = $pdo->prepare('SELECT id, sistema FROM roles WHERE id = ?'); $s->execute([$rolId]);
+            $rolNuevo = $s->fetch();
+            if (!$rolNuevo) fail('Selecciona un perfil/rol válido.');
+            $s = $pdo->prepare('SELECT COUNT(*) FROM usuarios WHERE usuario = ? AND id <> ?'); $s->execute([$usuario, $id]);
+            if ((int)$s->fetchColumn()) fail('Ya existe un usuario con ese nombre de usuario.');
+
+            if ($accion === 'crear') {
+                $pdo->prepare('INSERT INTO usuarios (usuario, nombre, clave_hash, rol_id, activo) VALUES (?,?,?,?,?)')
+                    ->execute([$usuario, $nombre, password_hash($clave, PASSWORD_DEFAULT), $rolId, $activo]);
+                out(['ok' => true, 'mensaje' => 'Usuario creado.', 'id' => (int)$pdo->lastInsertId()], 201);
+            }
+            if (!$id) fail('Falta indicar el usuario.');
+            $s = $pdo->prepare('SELECT u.rol_id, r.sistema FROM usuarios u JOIN roles r ON r.id = u.rol_id WHERE u.id = ?');
+            $s->execute([$id]);
+            $actual = $s->fetch();
+            if (!$actual) fail('Usuario no encontrado.', 404);
+            if ($id === $miId && ($rolId !== (int)$actual['rol_id'] || !$activo)) fail('No puedes cambiar tu propio perfil ni desactivarte.');
+            $pierdeDueno = (int)$actual['sistema'] && (!(int)$rolNuevo['sistema'] || !$activo);
+            if ($pierdeDueno && !quedaOtroDueno($id)) fail('Debe quedar al menos un Dueño activo.');
+            if ($clave !== '') {
+                $pdo->prepare('UPDATE usuarios SET usuario=?, nombre=?, clave_hash=?, rol_id=?, activo=? WHERE id=?')
+                    ->execute([$usuario, $nombre, password_hash($clave, PASSWORD_DEFAULT), $rolId, $activo, $id]);
+            } else {
+                $pdo->prepare('UPDATE usuarios SET usuario=?, nombre=?, rol_id=?, activo=? WHERE id=?')
+                    ->execute([$usuario, $nombre, $rolId, $activo, $id]);
+            }
+            out(['ok' => true, 'mensaje' => 'Usuario actualizado.']);
+
+        case 'roles':
+            $pdo = db();
+            if ($m === 'GET') {
+                requiere('roles.ver');
+                $q = trim((string)($_GET['q'] ?? ''));
+                $sql = 'SELECT r.id, r.nombre, r.descripcion, r.sistema,
+                               (SELECT COUNT(*) FROM usuarios u WHERE u.rol_id = r.id) AS usuarios,
+                               (SELECT COUNT(*) FROM rol_permiso rp WHERE rp.rol_id = r.id) AS permisos
+                        FROM roles r';
+                $par = [];
+                if ($q !== '') { $sql .= ' WHERE r.nombre LIKE ? OR r.descripcion LIKE ?'; $par = ["%$q%", "%$q%"]; }
+                $s = $pdo->prepare($sql . ' ORDER BY r.nombre'); $s->execute($par);
+                out($s->fetchAll());
+            }
+            if ($m !== 'POST') fail('Método no permitido.', 405);
+            $accion = (string)($in['accion'] ?? '');
+            $id = (int)($in['id'] ?? 0);
+            if (!in_array($accion, ['crear', 'actualizar', 'eliminar'], true)) fail('Acción no válida.');
+            requiere(['crear' => 'roles.crear', 'actualizar' => 'roles.editar', 'eliminar' => 'roles.eliminar'][$accion]);
+
+            if ($accion !== 'crear') {
+                if (!$id) fail('Falta indicar el perfil.');
+                $s = $pdo->prepare('SELECT id, nombre, sistema FROM roles WHERE id = ?'); $s->execute([$id]);
+                $rol = $s->fetch();
+                if (!$rol) fail('Perfil no encontrado.', 404);
+            }
+            if ($accion === 'eliminar') {
+                if ((int)$rol['sistema']) fail('El perfil Dueño está protegido y no se puede eliminar.');
+                $s = $pdo->prepare('SELECT COUNT(*) FROM usuarios WHERE rol_id = ?'); $s->execute([$id]);
+                if ((int)$s->fetchColumn()) fail('No se puede eliminar: hay usuarios con este perfil. Reasígnalos primero.');
+                $pdo->prepare('DELETE FROM roles WHERE id = ?')->execute([$id]);
+                out(['ok' => true, 'mensaje' => 'Perfil eliminado.']);
+            }
+            $nombre = trim((string)($in['nombre'] ?? ''));
+            $desc = trim((string)($in['descripcion'] ?? ''));
+            if (mb_strlen($nombre) < 3 || mb_strlen($nombre) > 60) fail('El nombre del perfil debe tener de 3 a 60 caracteres.');
+            if (mb_strlen($desc) > 200) fail('La descripción admite hasta 200 caracteres.');
+            if ($accion === 'actualizar' && (int)$rol['sistema'] && $nombre !== $rol['nombre']) fail('El perfil Dueño está protegido: no se puede renombrar.');
+            $s = $pdo->prepare('SELECT COUNT(*) FROM roles WHERE nombre = ? AND id <> ?'); $s->execute([$nombre, $id]);
+            if ((int)$s->fetchColumn()) fail('Ya existe un perfil con ese nombre.');
+            if ($accion === 'crear') {
+                $pdo->prepare('INSERT INTO roles (nombre, descripcion) VALUES (?,?)')->execute([$nombre, $desc]);
+                out(['ok' => true, 'mensaje' => 'Perfil creado. Asígnale permisos en la sección Permisos.', 'id' => (int)$pdo->lastInsertId()], 201);
+            }
+            $pdo->prepare('UPDATE roles SET nombre = ?, descripcion = ? WHERE id = ?')->execute([$nombre, $desc, $id]);
+            out(['ok' => true, 'mensaje' => 'Perfil actualizado.']);
+
+        case 'permisos':
+            $pdo = db();
+            if ($m === 'GET') {
+                requiere('permisos.ver');
+                $q = trim((string)($_GET['q'] ?? ''));
+                $sql = 'SELECT p.id, p.codigo, p.descripcion, p.sistema,
+                               (SELECT GROUP_CONCAT(rp.rol_id) FROM rol_permiso rp WHERE rp.permiso_id = p.id) AS roles
+                        FROM permisos p';
+                $par = [];
+                if ($q !== '') { $sql .= ' WHERE p.codigo LIKE ? OR p.descripcion LIKE ?'; $par = ["%$q%", "%$q%"]; }
+                $s = $pdo->prepare($sql . ' ORDER BY p.codigo'); $s->execute($par);
+                $filas = array_map(function ($f) {
+                    $f['roles'] = $f['roles'] === null ? [] : array_map('intval', explode(',', $f['roles']));
+                    return $f;
+                }, $s->fetchAll());
+                out(['permisos' => $filas, 'roles' => $pdo->query('SELECT id, nombre, sistema FROM roles ORDER BY nombre')->fetchAll()]);
+            }
+            if ($m !== 'POST') fail('Método no permitido.', 405);
+            $accion = (string)($in['accion'] ?? '');
+            $id = (int)($in['id'] ?? 0);
+
+            // Asignar o revocar un permiso a un perfil (casilla de la matriz).
+            if ($accion === 'asignar') {
+                requiere('roles.editar');
+                $rolId = (int)($in['rol_id'] ?? 0);
+                $permisoId = (int)($in['permiso_id'] ?? 0);
+                $concedido = filter_var($in['concedido'] ?? false, FILTER_VALIDATE_BOOLEAN);
+                $s = $pdo->prepare('SELECT sistema FROM roles WHERE id = ?'); $s->execute([$rolId]);
+                $rol = $s->fetch();
+                if (!$rol) fail('Perfil no encontrado.', 404);
+                if ((int)$rol['sistema']) fail('El perfil Dueño siempre conserva todos los permisos.');
+                $s = $pdo->prepare('SELECT COUNT(*) FROM permisos WHERE id = ?'); $s->execute([$permisoId]);
+                if (!(int)$s->fetchColumn()) fail('Permiso no encontrado.', 404);
+                if ($concedido) $pdo->prepare('INSERT IGNORE INTO rol_permiso (rol_id, permiso_id) VALUES (?,?)')->execute([$rolId, $permisoId]);
+                else $pdo->prepare('DELETE FROM rol_permiso WHERE rol_id = ? AND permiso_id = ?')->execute([$rolId, $permisoId]);
+                out(['ok' => true, 'mensaje' => $concedido ? 'Permiso asignado.' : 'Permiso revocado.']);
+            }
+            if (!in_array($accion, ['crear', 'actualizar', 'eliminar'], true)) fail('Acción no válida.');
+            requiere(['crear' => 'permisos.crear', 'actualizar' => 'permisos.editar', 'eliminar' => 'permisos.eliminar'][$accion]);
+            if ($accion !== 'crear') {
+                if (!$id) fail('Falta indicar el permiso.');
+                $s = $pdo->prepare('SELECT id, codigo, sistema FROM permisos WHERE id = ?'); $s->execute([$id]);
+                $perm = $s->fetch();
+                if (!$perm) fail('Permiso no encontrado.', 404);
+            }
+            if ($accion === 'eliminar') {
+                if ((int)$perm['sistema']) fail('Este permiso lo usa el sistema y no se puede eliminar.');
+                $pdo->prepare('DELETE FROM permisos WHERE id = ?')->execute([$id]);
+                out(['ok' => true, 'mensaje' => 'Permiso eliminado.']);
+            }
+            $codigo = strtolower(trim((string)($in['codigo'] ?? '')));
+            $desc = trim((string)($in['descripcion'] ?? ''));
+            if (mb_strlen($desc) > 200) fail('La descripción admite hasta 200 caracteres.');
+            if ($accion === 'actualizar' && (int)$perm['sistema']) $codigo = $perm['codigo']; // el código de un permiso del sistema no cambia
+            if (!preg_match('/^[a-z0-9_]+(\.[a-z0-9_]+)+$/', $codigo) || strlen($codigo) > 60) fail('El código debe tener el formato modulo.accion (minúsculas, números o guion bajo), máx. 60 caracteres.');
+            $s = $pdo->prepare('SELECT COUNT(*) FROM permisos WHERE codigo = ? AND id <> ?'); $s->execute([$codigo, $id]);
+            if ((int)$s->fetchColumn()) fail('Ya existe un permiso con ese código.');
+            if ($accion === 'crear') {
+                $pdo->beginTransaction();
+                $pdo->prepare('INSERT INTO permisos (codigo, descripcion) VALUES (?,?)')->execute([$codigo, $desc]);
+                $nuevo = (int)$pdo->lastInsertId();
+                // El Dueño siempre tiene todos los permisos, también los nuevos.
+                $pdo->prepare('INSERT IGNORE INTO rol_permiso (rol_id, permiso_id) SELECT id, ? FROM roles WHERE sistema = 1')->execute([$nuevo]);
+                $pdo->commit();
+                out(['ok' => true, 'mensaje' => 'Permiso creado y asignado al Dueño.', 'id' => $nuevo], 201);
+            }
+            $pdo->prepare('UPDATE permisos SET codigo = ?, descripcion = ? WHERE id = ?')->execute([$codigo, $desc, $id]);
+            out(['ok' => true, 'mensaje' => 'Permiso actualizado.']);
+
         case 'diagnostico':
+            requiere('config.ver');
             $errores = [];
-            foreach (['especies', 'pacientes', 'citas', 'registros_clinicos'] as $t) {
+            foreach (['especies', 'pacientes', 'citas', 'registros_clinicos', 'usuarios', 'roles', 'permisos', 'rol_permiso'] as $t) {
                 if (!db()->query("SHOW TABLES LIKE '$t'")->fetchColumn()) $errores[] = "Falta la tabla: $t";
             }
             if (!is_writable(__DIR__ . '/storage/fotos')) $errores[] = 'La carpeta storage/fotos no tiene permiso de escritura.';
-            if ($cfg['admin']['hash'] === 'PEGA_AQUI_EL_HASH') $errores[] = 'No has configurado la contraseña en config.php.';
             if (!is_file(__DIR__ . '/lib/fpdf/fpdf.php')) $errores[] = 'Falta instalar FPDF (backend/api/lib/fpdf/fpdf.php) para poder imprimir el carnet.';
             out(['errores' => $errores]);
 
