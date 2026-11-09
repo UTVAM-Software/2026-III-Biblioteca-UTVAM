@@ -1,11 +1,8 @@
-Esta carpeta debe contener el archivo fpdf.php de la librería FPDF.
+FPDF (version 1.9) ya viene INCLUIDA en esta carpeta, no hay que descargar nada:
 
-CÓMO INSTALARLA (una sola vez):
-1. Ve a http://www.fpdf.org/en/download.php
-2. Descarga la versión más reciente (un .zip).
-3. Dentro del zip hay un archivo llamado fpdf.php (y una carpeta font/ y doc/, esas no las necesitas).
-4. Copia SOLO fpdf.php a esta carpeta, para que quede en:
-   backend/api/lib/fpdf/fpdf.php
+  - fpdf.php
+  - font/   (archivos .json con las tipografias; sin esta carpeta el PDF falla)
 
-Si esta carpeta sigue sin fpdf.php, la ruta "Imprimir carnet" del sistema
-va a responder con un error explicando justo esto.
+FPDF es una libreria gratuita (http://www.fpdf.org) cuya licencia permite usarla y
+redistribuirla sin restricciones, incluso en proyectos comerciales.
+La usa la ruta "Imprimir carnet" del sistema.

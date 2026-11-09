@@ -125,3 +125,8 @@ th { background: var(--tarjeta); }
 .table-scroll { overflow-x: auto; }
 .table-scroll table { min-width: 680px; }
 .crud-pages { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 14px; }
+
+/* Diálogo nativo usado por las confirmaciones del frontend HTML. */
+.modal-dialog { border: 1px solid var(--borde); border-radius: var(--radius-lg); padding: var(--space-5); max-width: 420px; width: calc(100% - 32px); box-shadow: var(--sombra-modal); color: var(--color-texto); }
+.modal-dialog::backdrop { background: rgba(0,0,0,.45); }
+.modal-actions .btn { margin: 0; }
